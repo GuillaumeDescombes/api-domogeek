@@ -1,0 +1,17 @@
+[Unit]
+Description=apidomogeek
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+KillMode=process
+User=apidomogeek
+WorkingDirectory=/usr/local/bin/api-domogeek
+ExecStart=/usr/bin/python3 /usr/local/bin/api-domogeek/apidomogeek.py console
+
+[Install]
+WantedBy=multi-user.target
+
