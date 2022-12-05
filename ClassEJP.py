@@ -31,7 +31,7 @@ class EDFejp:
     try:
       rep = json.load(html)
     except:
-      syslog.syslog(syslog.LOG_ERR, "EJP: data format is incorrect")
+      syslog.syslog(syslog.LOG_ERR, "EJP: JSON format is incorrect")
       return "False"
     try:
       listEjp = rep["listeEjp"]

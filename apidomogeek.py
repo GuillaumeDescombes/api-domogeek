@@ -24,6 +24,7 @@ import ClassGeoLocation
 import ClassDawnDusk
 import ClassWeather
 import ClassEJP
+import ClassEcoW
 
 
 #***************#
@@ -100,6 +101,7 @@ geolocationrequest = ClassGeoLocation.geolocation()
 dawnduskrequest = ClassDawnDusk.sunriseClass()
 weatherrequest = ClassWeather.weather()
 ejprequest = ClassEJP.EDFejp()
+ecowattrequest = ClassEcoW.EDFEcoWatt()
 
 #local api url
 localapiurl= "http://" + config.get("nosection", "listenip", fallback="127.0.0.1") + ":" + str(config.getint("nosection", "listenport",fallback=8080))
@@ -162,7 +164,8 @@ urls = (
   '/season(.*)', 'season',
   '/myip(.*)', 'myip',
   '/feastedsaint/(.*)', 'feastedsaint',
-  '/', 'index'
+  '/ecowattedf/(.*)', 'ecowattedf',
+  '/(.*)', 'index'
 )
 
 class webLog(WsgiLog):
@@ -189,9 +192,13 @@ class webLog(WsgiLog):
 app = web.application(urls, globals())
 
 class index:
-    def GET(self):
+    def GET(self, uri):
       # redirect to the static file ...
-      raise web.seeother('/static/index.html')
+      request = uri.split('/')
+      if request == ['']:      
+        raise web.seeother('/static/index.html')
+      else:
+        raise web.seeother("/static/" + request[0])
 
 
 """
@@ -862,11 +869,12 @@ class vigilance:
 
 
 """
-@api {get} /geolocation/:city City Geolocation 
+@api {get} /geolocation/:city/:country City, Country Geolocation 
 @apiName GetGeolocation
 @apiGroup Domogeek
-@apiDescription Ask geolocation (latitude/longitude) :city
-@apiParam {String} city City name (avoid accents, no space, no guarantee works other than France Metropolitan).
+@apiDescription Ask geolocation (latitude/longitude) :city :country
+@apiParam {String} city City name (avoid accents, no space).
+@apiParam {String} country Country name (France by default).
 @apiSuccessExample Success-Response:
      HTTP/1.1 200 OK
      {"latitude": 48.390394000000001, "longitude": -4.4860759999999997}
@@ -887,17 +895,22 @@ class geolocation:
       request = uri.split('/')
       if request == ['']:
         web.badrequest()
-        return "Incorrect request : /geolocation/{city}\n"
+        return "Incorrect request : /geolocation/{city} or /geolocation/{city}/{country}\n"
       try:
         city = request[0]
       except:
-        return "Incorrect request : /geolocation/{city}\n"
-      syslog.syslog(syslog.LOG_DEBUG,"request geolocation %s" % city)                
+        return "Incorrect request : /geolocation/{city} or /geolocation/{city}/{country}\n"
+      try:
+        country = request[1]
+      except:
+        country="France"
+        pass
+      syslog.syslog(syslog.LOG_DEBUG,"request geolocation %s, %s" % (city, country))                
       getlocation = None
       if not rc is None:
         #trying in REDIS cache (if enabled)
-        key=city
-        rediskey =  hashlib.md5(key.encode('utf-8')).hexdigest()
+        key=city+", "+country
+        rediskey = hashlib.md5(key.encode('utf-8')).hexdigest()
         getlocation = rc.get(rediskey).decode("UTF-8")
       if not getlocation is None:
         syslog.syslog(syslog.LOG_DEBUG,"FOUND LOCATION IN REDIS: %s" % getlocation)
@@ -908,7 +921,7 @@ class geolocation:
         lng=float(data[1])
       #trying in local cache 
       if uselocalcache and getlocation is None:
-        key="geolocation|" + city
+        key="geolocation|" + city + "|" + country
         getlocation = config.get("cache", key, fallback=None)
         if not getlocation is None:
           syslog.syslog(syslog.LOG_DEBUG,"FOUND LOCATION IN LOCAL CACHE: %s" % getlocation)
@@ -917,6 +930,7 @@ class geolocation:
           data = tr2.split(',')
           lat=float(data[0])
           lng=float(data[1])
+
       #either in REDIS or LOCAL CACHE
       if not getlocation is None:
         web.header('Content-Type', 'application/json')
@@ -926,7 +940,7 @@ class geolocation:
       if googleapikey != '' and getlocation is None:
         try:
           syslog.syslog(syslog.LOG_DEBUG,"Request Google Geolocation")
-          data = geolocationrequest.geogoogle(city, googleapikey)
+          data = geolocationrequest.geogoogle(city+", "+country, googleapikey)
         except Exception as e:
           syslog.syslog(syslog.LOG_ERR, 'Google Geolocation - An exception occurred: {}'.format(e))
           data= False
@@ -942,7 +956,7 @@ class geolocation:
       if bingmapapikey != '' and getlocation is None:
         try:
           syslog.syslog(syslog.LOG_DEBUG,"Request Bing Geolocation")
-          data = geolocationrequest.geobing(city, bingmapapikey)
+          data = geolocationrequest.geobing(city+", "+country, bingmapapikey)
         except Exception as e:
           syslog.syslog(syslog.LOG_ERR, 'Bing Geolocation - An exception occurred: {}'.format(e))
           data= False
@@ -958,7 +972,7 @@ class geolocation:
       if geonameskey != '' and getlocation is None:
         try:
           syslog.syslog(syslog.LOG_DEBUG,"Request GEONAMES Geolocation")
-          data = geolocationrequest.geonames(city, geonameskey)
+          data = geolocationrequest.geonames(city+", "+country, geonameskey)
         except Exception as e:
           syslog.syslog(syslog.LOG_ERR, 'GEONAMES Geolocation - An exception occurred: {}'.format(e))
           data= False
@@ -971,18 +985,18 @@ class geolocation:
           syslog.syslog(syslog.LOG_DEBUG,"GEO DATA FROM GEONAMES: %s " % getlocation)
             
       if getlocation is None:
-        syslog.syslog(syslog.LOG_DEBUG,"NO GEOLOCATION DATA AVAILABLE for %s" % city)
+        syslog.syslog(syslog.LOG_DEBUG,"NO GEOLOCATION DATA AVAILABLE for %s, %s" % (city, country))
         return "NO GEOLOCATION DATA AVAILABLE\n"
       else:
         if not rc is None:
-          key=city
+          key=city+", "+country
           rediskey =  hashlib.md5(key.encode('utf-8')).hexdigest()
           rc.set(rediskey, getlocation )
-          syslog.syslog(syslog.LOG_DEBUG, "SET GEOLOCATION "+city+" IN REDIS: (%s, %s)'" % (str(lat), str(lng)))            
+          syslog.syslog(syslog.LOG_DEBUG, "SET GEOLOCATION "+city+", "+country+" IN REDIS: (%s, %s)'" % (str(lat), str(lng)))            
         if uselocalcache:
-          key="geolocation|" + city
+          key="geolocation|" + city + "|" + country
           config.set("cache", key, getlocation)  
-          syslog.syslog(syslog.LOG_DEBUG, "SET GEOLOCATION "+city+" IN LOCAL CACHE: (%s, %s)'" % (str(lat), str(lng)))            
+          syslog.syslog(syslog.LOG_DEBUG, "SET GEOLOCATION "+city+", "+country+" IN LOCAL CACHE: (%s, %s)'" % (str(lat), str(lng)))            
           try:
             with open(configFileName, 'w') as configfile:
               config.write(configfile)
@@ -1452,7 +1466,6 @@ class ejpedf:
         return "Incorrect request : /edfejp/{nord|sud|ouest|paca}/{today|tomorrow}\n"
       if request[1] == "today":
         syslog.syslog(syslog.LOG_DEBUG,"request edfejp %s " % request[1])  
-        #try:
         getejptoday=None
         if not rc is None:
           key="ejptoday"+zoneok
@@ -1460,7 +1473,6 @@ class ejpedf:
           getejptoday = rc.get(rediskeyejptoday)
         if getejptoday is None:
           result = ejprequest.EJPToday()
-          #result = "False"
           if not rc is None:
             key="ejptoday"+zoneok
             rediskeyejptoday =  hashlib.md5(key.encode('utf-8')).hexdigest()
@@ -1479,15 +1491,13 @@ class ejpedf:
 
       if request[1] == "tomorrow":
         syslog.syslog(syslog.LOG_DEBUG,"request edfejp %s " % request[1])  
-        #try:
         getejptomorrow=None
         if not rc is None:
           key="ejptomorrow"+zoneok
           rediskeyejptomorrow =  hashlib.md5(key.encode('utf-8')).hexdigest()
           getejptomorrow = rc.get(rediskeyejptomorrow)
         if getejptomorrow is None:
-          #result = ejprequest.EJPTomorrow(zoneok)
-          result = "False"
+          result = ejprequest.EJPTomorrow()
           if not rc is None:
             key="ejptomorrow"+zoneok
             rediskeyejptomorrow =  hashlib.md5(key.encode('utf-8')).hexdigest()
@@ -1497,8 +1507,6 @@ class ejpedf:
         else:
           result = getejptomorrow.decode("UTF-8")
           syslog.syslog(syslog.LOG_DEBUG, "FOUND EJP "+zoneok+" TOMOROW IN REDIS: %s" % result)
-        #except:
-        #    result = ejprequest.EJPTomorrow(zoneok)
 
         if format == "json":
           web.header('Content-Type', 'application/json')
@@ -1558,7 +1566,7 @@ class feastedsaint:
         if uselocalcache and result is None:
           todayrequest = str(day)+"-"+str(month)
           key="feastedsaint|"+todayrequest
-          result = config.get("cache", key, fallback=None)
+          result = config.get("cache", key, fallback=None).replace(",", ", ").replace("  "," ")
         if result is None:
           result = "N/A"
         if format == "json":
@@ -1583,7 +1591,7 @@ class feastedsaint:
         if uselocalcache and result is None:
           todayrequest = str(day)+"-"+str(month)
           key="feastedsaint|"+todayrequest
-          result = config.get("cache", key, fallback=None)
+          result = config.get("cache", key, fallback=None).replace(",", ", ").replace("  "," ")
         if result is None:
           result = "N/A"          
         if format == "json":
@@ -1632,9 +1640,97 @@ class feastedsaint:
         else:
           return result
 
+"""
+@api {get} /ecowattedf/:date/:responsetype Ecowatt EDF color Request
+@apiName GetEcoWatt
+@apiGroup Domogeek
+@apiDescription Ask the EDF EcoWatt color
+@apiParam {String} now Ask for today.
+@apiParam {String} tomorrow Ask for tomorrow.
+@apiParam {String} [responsetype]  Specify Response Type (raw by default or specify json, only for single element).
+@apiSuccessExample Success-Response:
+HTTP/1.1 200 OK
+Content-Type: application/json
+Transfer-Encoding: chunked
+Date: Thu, 03 Jul 2014 17:16:47 GMT
+Server: localhost
+{"color": "Vert"}
+
+@apiErrorExample Error-Response:
+HTTP/1.1 400 Bad Request
+400 Bad Request
+
+@apiExample Example usage:
+     curl http://api.domogeek.fr/ecowattedf/now
+     curl http://api.domogeek.fr/ecowattedf/now/json
+     curl http://api.domogeek.fr/ecowattedf/tomorrow
+     curl http://api.domogeek.fr/ecowattedf/tomorrow/json
+
+"""
+
+class ecowattedf:
+    def GET(self,uri):
+      request = uri.split('/')
+      if request == ['']:
+        web.badrequest()
+        return "Incorrect request : /ecowattedf/{now | tomorrow}\n"
+      try:
+        format = request[1]
+      except:
+        format = None
+      if request[0] == "now":
+        syslog.syslog(syslog.LOG_DEBUG,"request ecowattedf %s" % request[0])
+        getecowattnow = None
+        if not rc is None:
+          key="ecowattnow"
+          rediskeyecowattnow =  hashlib.md5(key.encode('utf-8')).hexdigest()
+          getecowattnow = rc.get(rediskeyecowattnow)          
+        if getecowattnow is None:
+          result = ecowattrequest.EcoWattToday()
+          if not rc is None:
+            key="ecowattnow"
+            rediskeyecowattnow =  hashlib.md5(key.encode('utf-8')).hexdigest()
+            rc.set(rediskeyecowattnow, result, 1800)
+            rc.expire(rediskeyecowattnow ,1800)
+            syslog.syslog(syslog.LOG_DEBUG,"SET ECOWATT NOW IN REDIS: '%s'" % result)
+        else:
+          result = getecowattnow.decode("UTF-8")
+          syslog.syslog(syslog.LOG_DEBUG,"FOUND ECOWATT NOW IN REDIS: '%s'" % result)
+        if format == "json":
+          web.header('Content-Type', 'application/json')
+          return json.dumps({"color": result})
+        else:
+          return result
+      if request[0] == "tomorrow":
+        syslog.syslog(syslog.LOG_DEBUG,"request ecowattedf %s" % request[0])
+        getecowatttomorrow = None
+        if not rc is None:
+          key="ecowatttomorrow"
+          rediskeyecowatttomorrow =  hashlib.md5(key.encode('utf-8')).hexdigest()
+          getecowatttomorrow = rc.get(rediskeyecowatttomorrow)
+        if getecowatttomorrow is None:
+          result = ecowattrequest.EcoWattTomorrow()
+          if not rc is None:
+            key="ecowatttomorrow"
+            rediskeyecowatttomorrow =  hashlib.md5(key.encode('utf-8')).hexdigest()
+            rc.set(rediskeyecowatttomorrow, result, 1800)
+            rc.expire(rediskeyecowatttomorrow ,1800)
+            syslog.syslog(syslog.LOG_DEBUG,"SET ECOWATT TOMORROW IN REDIS: '%s'" % result)
+        else:
+          result = getecowatttomorrow.decode("UTF-8")
+          syslog.syslog(syslog.LOG_DEBUG,"FOUND ECOWATT TOMORROW IN REDIS: '%s'" % result)
+        if format == "json":
+          web.header('Content-Type', 'application/json')
+          return json.dumps({"color": result})
+        else:
+          return result
+      web.badrequest()
+      return "Incorrect request : /ecowattedf/{now | tomorrow}\n"
+
+
 class MyDaemon(Daemon):
     def run(self):
-      syslog.syslog(syslog.LOG_INFO, "listen on %s" % sys.argv[1])
+      syslog.syslog(syslog.LOG_INFO, "APIDOMOGEEK app listening on %s" % sys.argv[1])
       app.run(webLog)
       
 if __name__ == "__main__":
@@ -1668,6 +1764,8 @@ if __name__ == "__main__":
         print(temporequest.TempoTomorrow())        
       elif 'Vigilance' == sys.argv[2]:  
         print(vigilancerequest.getvigilance(sys.argv[3]))          
+      elif 'EcoWattToday' == sys.argv[2]:  
+        print(ecowattrequest.EcoWattToday())          
     else:
       print ("%s: Unknown command" % (sys.argv[1]))
       sys.exit(2)

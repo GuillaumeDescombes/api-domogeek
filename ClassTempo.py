@@ -24,7 +24,7 @@ class EDFTempo:
     try:
       response = json.load(page)
     except:
-      syslog.syslog(syslog.LOG_ERR, "Tempo: data format is incorrect")
+      syslog.syslog(syslog.LOG_ERR, "Tempo: JSON format is incorrect")
       return "NON_DEFINI"
     try:
       colortoday = response['couleurJourJ']

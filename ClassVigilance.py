@@ -26,24 +26,24 @@ class vigilance:
       return "orange"
     if number == "4":
       return "rouge"
-    return "non defini"
+    return "non défini"
     
   def __getRisk(self, number):
     if number == "1":
       return "vent"
     if number == "2":
-      return "pluie-inondation"
+      return "pluie inondation"
     if number == "3":
       return "orages"
     if number == "4":
       return "inondations"
     if number == "5":
-      return "neige-verglas"
+      return "neige verglas"
     if number == "6":
       return "canicule"
     if number == "7":
-      return "grand-froid"
-    return "non defini" 
+      return "grand froid"
+    return "non défini" 
 
   def getvigilance(self, deprequest):
     if len(deprequest) != 2:
@@ -75,14 +75,14 @@ class vigilance:
         for flood in all.getElementsByTagName('crue'):
           floodresult = flood.attributes['valeur'].value
         if riskresult:
-          risk = self.__getRisk(riskresult)
+          risk = self.__getRisk(riskresult).title()
         else:
           risk = "RAS"
         if floodresult:  
-          flood = self.__getColor(floodresult)
+          flood = self.__getColor(floodresult).title()
         else:
-          flood = "non defini"
-        color = self.__getColor(colorresult)
+          flood = "non défini"
+        color = self.__getColor(colorresult).title()
         return color, risk, flood
     except:
       syslog.syslog(syslog.LOG_ERR, "Vigilance: data format is incorrect")
