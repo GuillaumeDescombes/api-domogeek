@@ -1566,9 +1566,10 @@ class feastedsaint:
         if uselocalcache and result is None:
           todayrequest = str(day)+"-"+str(month)
           key="feastedsaint|"+todayrequest
-          result = config.get("cache", key, fallback=None).replace(",", ", ").replace("  "," ")
+          result = config.get("cache", key, fallback=None)
         if result is None:
           result = "N/A"
+        result=result.replace(",", ", ").replace("  "," ")
         if format == "json":
           web.header('Content-Type', 'application/json')
           return json.dumps({"feastedsaint": result})
