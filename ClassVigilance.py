@@ -1,23 +1,32 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 #
-# Gruik coded by GuiguiAbloc
+# coded by GuiguiAbloc
 # http://blog.guiguiabloc.fr
 # Rewritten by Guillaume Descombes
-# 2022.12.04
-#
+# V1 2022.12.04
+# V2 2024.09.22
 
 import urllib.request, urllib.error
 import syslog
-from xml.dom import minidom
+import json
+import traceback
 
-#https://donneespubliques.meteofrance.fr/client/document/doc_vigilance_258_269.pdf
+#https://donneespubliques.meteofrance.fr/?fond=produit&id_produit=305&id_rubrique=50
 
-class vigilance:
+class MeteoFranceVigilance:
+
+  def __init__ (self, apiKey):
+    self.headers =  {
+      "accept": "*/*",
+      "apikey": apiKey
+    }
 
   def __getColor(self, number):
+    if type(number) == int:
+      number=str(number)
     if number == "0":
-      return "vert"
+      return "non défini"
     if number == "1":
       return "vert"
     if number == "2":
@@ -29,64 +38,92 @@ class vigilance:
     return "non défini"
     
   def __getRisk(self, number):
+    if type(number) == int:
+      number=str(number)
     if number == "1":
       return "vent"
     if number == "2":
-      return "pluie inondation"
+      return "pluie"
     if number == "3":
       return "orages"
     if number == "4":
-      return "inondations"
+      return "crues"
     if number == "5":
-      return "neige verglas"
+      return "neige"
     if number == "6":
       return "canicule"
     if number == "7":
       return "grand froid"
+    if number == "8":
+      return "avalanches"
+    if number == "9":
+      return "vagues"
     return "non défini" 
 
-  def getvigilance(self, deprequest):
+  def getVigilance(self, deprequest):
+    if type(deprequest) == int:
+      if deprequest<10:
+        deprequest="0"+str(deprequest)
+      else:
+        deprequest=str(deprequest)
     if len(deprequest) != 2:
-      syslog.syslog(syslog.LOG_ERR, "Vigilance: Error in department number")
-    #does not work anymore
-    return "non defini", "non defini", "non defini"
-    url = 'http://vigilance2019.meteofrance.com/data/NXFR34_LFPW_.xml'
+      syslog.syslog(syslog.LOG_ERR, "Vigilance: Error in department number '{deprequest}'")
+      traceback.print_exc()
+      return "ERROR", "", "", "", ""
+
+    url = "https://public-api.meteofrance.fr/public/DPVigilance/v1/cartevigilance/encours"
     try:
-      data = urllib.request.urlopen(url)
+      req = urllib.request.Request(url, headers=self.headers)
+      #proxies= urllib.request.getproxies()
+      #print(f"proxies: {proxies}")
+      response = urllib.request.urlopen(req)
     except:
       syslog.syslog(syslog.LOG_ERR, "Vigilance: cannot get data")
-      return "non defini", "non defini", "non defini"
-    
+      traceback.print_exc()
+      return "ERROR", "", "", "", ""
     try:
-      dom = minidom.parse(data)
+      data = json.load(response)
+      response.close()
     except:
-      syslog.syslog(syslog.LOG_ERR, "Vigilance: XML format is incorrect")
-      return "non defini", "non defini", "non defini"
-    
+      syslog.syslog(syslog.LOG_ERR, "Vigilance: JSON format is incorrect")
+      traceback.print_exc()
+      return "ERROR","", "", "", ""
     try:
-      for all in dom.getElementsByTagName('datavigilance'):
-        depart = all.attributes['dep'].value
-        if depart != deprequest:
-          continue
-        colorresult = all.attributes['couleur'].value
-        riskresult = None
-        floodresult = None
-        for risk in all.getElementsByTagName('risque'):
-          riskresult = risk.attributes['valeur'].value
-        for flood in all.getElementsByTagName('crue'):
-          floodresult = flood.attributes['valeur'].value
-        if riskresult:
-          risk = self.__getRisk(riskresult).title()
-        else:
-          risk = "RAS"
-        if floodresult:  
-          flood = self.__getColor(floodresult).title()
-        else:
-          flood = "non défini"
-        color = self.__getColor(colorresult).title()
-        return color, risk, flood
+      periods = data['product']['periods']
+      for period in periods:
+        domains = period['timelaps']['domain_ids']
+        for domain in domains:
+          depart = domain['domain_id']
+          if depart != deprequest:
+            continue
+          #print(f"domain: {domain}")
+          globalColorResult = self.__getColor(domain['max_color_id']).title()
+          riskNameResult = ""
+          floodColorResult = self.__getColor(0).title()
+          stormColorResult = self.__getColor(0).title()
+          phenomenons = domain['phenomenon_items']
+          for phenomenon in phenomenons:
+            if phenomenon['phenomenon_id'] == "4": #Crue / Flood
+              floodColorResult = self.__getColor(phenomenon['phenomenon_max_color_id']).title()
+            if phenomenon['phenomenon_id'] == "3": #Orage / Storm
+              stormColorResult = self.__getColor(phenomenon['phenomenon_max_color_id']).title()
+            if int(phenomenon['phenomenon_max_color_id']) >= 3: #orange or red
+              riskNameResult = riskNameResult + self.__getRisk(phenomenon['phenomenon_id']).title() +", "
+          if riskNameResult != "":
+            #remove the last coma
+            riskNameResult=riskNameResult[0:-2]
+          else:
+            riskNameResult = "Aucun"
+          return "OK", riskNameResult, globalColorResult, floodColorResult, stormColorResult
     except:
       syslog.syslog(syslog.LOG_ERR, "Vigilance: data format is incorrect")
       traceback.print_exc()
-      pass
-    return "non defini", "non defini", "non defini"
+    return "UNDEFINED", "", "", "", ""
+
+if __name__ == "__main__":
+  #Test for 92
+  VigilanceRequest = MeteoFranceVigilance("")
+  VigilanceResponse=VigilanceRequest.getVigilance(92)
+  print(f"response (92): {VigilanceResponse}")
+  VigilanceResponse=VigilanceRequest.getVigilance(34)
+  print(f"response (34): {VigilanceResponse}")

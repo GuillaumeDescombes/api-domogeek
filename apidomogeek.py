@@ -57,6 +57,7 @@ except FileNotFoundError as e:
                          "geonameskey": "",
                          "worldweatheronlineapikey": "",
                          "openweathermapapikey":"",
+                         "meteofranceapikey":"",
                          "useredis": True,
                          "redis_host": "127.0.0.1",
                          "redis_port": 6379
@@ -96,7 +97,6 @@ socket.setdefaulttimeout(config.getint("nosection","timeout", fallback=10))
 school = ClassSchoolCalendar.schoolcalendar()
 dayrequest = Holiday.jourferie()
 temporequest = ClassTempo.EDFTempo()
-vigilancerequest = ClassVigilance.vigilance()
 geolocationrequest = ClassGeoLocation.geolocation()
 dawnduskrequest = ClassDawnDusk.sunriseClass()
 weatherrequest = ClassWeather.weather()
@@ -122,6 +122,10 @@ syslog.syslog(syslog.LOG_INFO, "worldweatheronlineapikey: %s" % worldweatheronli
 
 openweathermapapikey = config.get("nosection", "openweathermapapikey", fallback='')
 syslog.syslog(syslog.LOG_INFO, "openweathermapapikey: %s" % openweathermapapikey)
+
+meteofranceapikey = config.get("nosection", "meteofranceapikey", fallback='')
+syslog.syslog(syslog.LOG_INFO, "meteofranceapikey: %s" % meteofranceapikey)
+vigilancerequest = ClassVigilance.MeteoFranceVigilance(meteofranceapikey)
 
 ##############
 # REDIS      #
@@ -743,7 +747,7 @@ class schoolholiday:
 @apiGroup Domogeek
 @apiDescription Ask Vigilance MeteoFrance for :department
 @apiParam {String} department Department number (France Metropolitan).
-@apiParam {String} vigilancerequest Vigilance request {color|risk|flood|all}.
+@apiParam {String} vigilancerequest Vigilance request {color|risk|flood|storm|all}.
 @apiParam {String} [responsetype]  Specify Response Type (raw by default or specify json, only for single element).
 @apiSuccessExample Success-Response:
      HTTP/1.1 200 OK
@@ -768,47 +772,42 @@ class vigilance:
       request = uri.split('/')
       if request == ['']:
         web.badrequest()
-        return "Incorrect request : /vigilance/{department}/{color|risk|flood|all}\n"
+        return "Incorrect request : /vigilance/{department}/{color|risk|flood|storm|all}\n"
       try:
         dep = request[0]
       except:
         web.badrequest()
-        return "Incorrect request : /vigilance/{department}/{color|risk|flood|all}\n"
+        return "Incorrect request : /vigilance/{department}/{color|risk|flood|storm|all}\n"
       try:
         vigilancequery = request[1]
       except:
         web.badrequest()
-        return "Incorrect request : /vigilance/{department}/{color|risk|flood|all}\n"
+        return "Incorrect request : /vigilance/{department}/{color|risk|flood|storm|all}\n"
       try:
         format = request[2]
       except:
         format = None
       if len(dep) > 2:
         web.badrequest()
-        return "Incorrect request : /vigilance/{department number}/{color|risk|flood|all}\n"
-      if vigilancequery not in ["color","risk","flood", "all"]: 
+        return "Incorrect request : /vigilance/{department number}/{color|risk|flood|storm|all}\n"
+      if vigilancequery not in ["color","risk","flood","storm","all"]: 
         web.badrequest()
-        return "Incorrect request : /vigilance/{department}/{color|risk|flood|all}\n"
-      if dep == "92" or dep == "93" or dep == "94":
-        dep = "75"
+        return "Incorrect request : /vigilance/{department}/{color|risk|flood|storm|all}\n"
       if dep == "20":
         dep = "2A"
       syslog.syslog(syslog.LOG_DEBUG,"request vigilance %s" % dep)
-      #try:
-      getvigilance = None
+      vigilanceRedis = None
+      key=dep+"vigilance"
+      redisKey =  hashlib.md5(key.encode('utf-8')).hexdigest()
       if not rc is None:
-        key=dep+"vigilance"
-        rediskeyvigilance =  hashlib.md5(key.encode('utf-8')).hexdigest()
-        getvigilance = rc.get(rediskeyvigilance)
-      if getvigilance is None:
-        result = vigilancerequest.getvigilance(dep)
+        vigilanceRedis = rc.get(redisKey)
+      if vigilanceRedis is None:
+        result = vigilancerequest.getVigilance(dep)
         if not rc is None:
-          key=dep+"vigilance"
-          rediskeyvigilance =  hashlib.md5(key.encode('utf-8')).hexdigest()
           data = "(" + ",".join(result) + ")"
-          rc.set(rediskeyvigilance, data, 1800)
-          rc.expire(rediskeyvigilance ,1800)
-          syslog.syslog(syslog.LOG_DEBUG, "SET VIGILANCE "+dep+" IN REDIS: '%s'" % data)
+          rc.set(redisKey, data, 1800)
+          rc.expire(redisKey ,1800)
+          syslog.syslog(syslog.LOG_DEBUG, f"Set Vigilance {dep} in Redis: '{data}'")
       else:
         data = getvigilance.decode("UTF-8")
         tr1 = data.replace("(","")
@@ -816,35 +815,41 @@ class vigilance:
         tr3 = tr2.replace("'","")
         tr4 = tr3.replace(" ","")
         result = tr4.split(',')
-        syslog.syslog(syslog.LOG_DEBUG,"FOUND VIGILANCE "+dep+" IN REDIS: '%s'" % data)
-      #except:
-      #    result = vigilancerequest.getvigilance(dep)
-  
-      color =  result[0]
-      risk =  result[1]
-      flood =  result[2]
+        syslog.syslog(syslog.LOG_DEBUG,f"Found VIgilance {dep} in Redis: '{data}'")
+      riskName = result[1]
+      globalColor = result[2]
+      floodColor = result[3]
+      stormColor = result[4]
       if vigilancequery == "color":
         if format == "json":
           web.header('Content-Type', 'application/json')
-          return json.dumps({"vigilancecolor": color})
+          return json.dumps({"vigilancecolor": globalColor})
         else:
-          return color
+          return globalColor
       if vigilancequery == "risk":
         if format == "json":
           web.header('Content-Type', 'application/json')
-          return json.dumps({"vigilancerisk": risk})
+          return json.dumps({"vigilancerisk": riskName})
         else:
-          return risk
+          return riskName
       if vigilancequery == "flood":
         if format == "json":
           web.header('Content-Type', 'application/json')
-          return json.dumps({"vigilanceflood": flood})
+          return json.dumps({"vigilanceflood": floodColor})
         else:
-          return flood
+          return floodColor
+      if vigilancequery == "storm":
+        if format == "json":
+          web.header('Content-Type', 'application/json')
+          return json.dumps({"vigilancestorm": stormColor})
+        else:
+          return stormColor
       if vigilancequery == "all":
         web.header('Content-Type', 'application/json')
-        return json.dumps({"vigilancecolor": color, "vigilancerisk": risk, "vigilanceflood": flood})
-
+        return json.dumps({"vigilancecolor": globalColor, "vigilancerisk": riskName, "vigilanceflood": floodColor, "vigilancestorm": stormColor})
+      # Other case
+      web.badrequest()
+      return "Incorrect request : /vigilance/{department}/{color|risk|flood|storm|all}\n"
 
 """
 @api {get} /geolocation/:city/:country City, Country Geolocation 
@@ -1702,24 +1707,27 @@ if __name__ == "__main__":
       sys.argv[1] =  listenip+':'+str(listenport)
       service.console()
     elif 'test' == sys.argv[1]:  
+      if len(sys.argv) == 2:
+        print ("usage: %s test EJPToday|EJPTomorrow|TempoToday|TempoTomorow|Vigilance xx|EcoWattToday" % sys.argv[0])
+        sys.exit(2)
       print("MODE TEST: %s" % sys.argv[2])
       if 'EJPToday' == sys.argv[2]:  
-        print(ejprequest.EJPToday())
+        print(ejprequest.getToday())
       elif 'EJPTomorrow' == sys.argv[2]:  
-        print(ejprequest.EJPTomorrow())        
+        print(ejprequest.getTomorrow())        
       elif 'TempoToday' == sys.argv[2]:  
-        print(temporequest.TempoToday())        
+        print(temporequest.getToday())        
       elif 'TempoTomorow' == sys.argv[2]:  
-        print(temporequest.TempoTomorrow())        
+        print(temporequest.getTomorrow())        
       elif 'Vigilance' == sys.argv[2]:  
-        print(vigilancerequest.getvigilance(sys.argv[3]))          
+        print(vigilancerequest.getVigilance(sys.argv[3]))          
       elif 'EcoWattToday' == sys.argv[2]:  
         print(ecowattrequest.EcoWattToday())          
     else:
       print ("%s: Unknown command" % (sys.argv[1]))
       sys.exit(2)
   else:
-    print ("usage: %s start|stop|restart|console" % sys.argv[0])
+    print ("usage: %s start|stop|restart|console|test" % sys.argv[0])
     sys.exit(2)
     
    

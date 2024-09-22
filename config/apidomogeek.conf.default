@@ -8,6 +8,7 @@ bingmapapikey =
 geonameskey = 
 worldweatheronlineapikey = 
 openweathermapapikey = #YOUR KEY HERE#
+meteofranceapikey = #YOUR KEY HERE# -- please refer to https://portail-api.meteofrance.fr/web/fr/faq -- 
 useredis = False
 redis_host = 127.0.0.1
 redis_port = 6379
