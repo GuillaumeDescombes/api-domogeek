@@ -100,7 +100,7 @@ vigilancerequest = ClassVigilance.vigilance()
 geolocationrequest = ClassGeoLocation.geolocation()
 dawnduskrequest = ClassDawnDusk.sunriseClass()
 weatherrequest = ClassWeather.weather()
-ejprequest = ClassEJP.EDFejp()
+ejprequest = ClassEJP.EDFEJP()
 ecowattrequest = ClassEcoW.EDFEcoWatt()
 
 #local api url
@@ -527,62 +527,40 @@ class tempoedf:
         format = request[1]
       except:
         format = None
-      if request[0] == "now":
-        syslog.syslog(syslog.LOG_DEBUG,"request tempoedf %s" % request[0])
-        #try:
-        gettemponow = None
+      if request[0] == "now" or request[0] == "tomorrow":
+        syslog.syslog(syslog.LOG_DEBUG,f"request tempoedf {request[0]}")
+        tempoRedis = None
+        key=f"tempo{request[0]}"
+        redisKey =  hashlib.md5(key.encode('utf-8')).hexdigest()
         if not rc is None:
-          key="temponow"
-          rediskeytemponow =  hashlib.md5(key.encode('utf-8')).hexdigest()
-          gettemponow = rc.get(rediskeytemponow)          
-        if gettemponow is None:
-          result = temporequest.TempoToday()
-          #result = "bleu"
-          if not rc is None:
-            key="temponow"
-            rediskeytemponow =  hashlib.md5(key.encode('utf-8')).hexdigest()
-            rc.set(rediskeytemponow, result, 1800)
-            rc.expire(rediskeytemponow ,1800)
-            syslog.syslog(syslog.LOG_DEBUG,"SET TEMPO NOW IN REDIS: '%s'" % result)
+          tempoRedis = rc.get(redisKey)
+        if tempoRedis is None:
+          if request[0] == "now":
+            result = temporequest.getToday()
+          elif request[0] == "tomorrow":
+            result = temporequest.getTomorrow()
+          else:
+            result = ["ERROR",""]
+          if not rc is None and result[0] == "OK":
+            rc.set(redisKey, result[1], 1800)
+            rc.expire(redisKey,1800)
+            syslog.syslog(syslog.LOG_DEBUG,f"Set '{key}' in REDIS: '{result[1]}'")
         else:
-          result = gettemponow.decode("UTF-8")
-          syslog.syslog(syslog.LOG_DEBUG,"FOUND TEMPO NOW IN REDIS: '%s'" % result)
-        #except:
-        #    result = temporequest.TempoToday()
-
+          result = ["OK",""]
+          result [1] = tempoRedis.decode("UTF-8")
+          syslog.syslog(syslog.LOG_DEBUG,f"Found '{key}' in REDIS: 'result[1]'")
         if format == "json":
           web.header('Content-Type', 'application/json')
-          return json.dumps({"tempocolor": result})
+          if result[0] == "OK":
+            return json.dumps({"tempocolor": result[1]})
+          else:
+            return json.dumps({"tempocolor": result[0]})
         else:
-          return result
-      if request[0] == "tomorrow":
-        syslog.syslog(syslog.LOG_DEBUG,"request tempoedf %s" % request[0])
-        #try:
-        gettempotomorrow = None
-        if not rc is None:
-          key="tempotomorrow"
-          rediskeytempotomorrow =  hashlib.md5(key.encode('utf-8')).hexdigest()
-          gettempotomorrow = rc.get(rediskeytempotomorrow)
-        if gettempotomorrow is None:
-          result = temporequest.TempoTomorrow()
-          #result = "bleu"
-          if not rc is None:
-            key="tempotomorrow"
-            rediskeytempotomorrow =  hashlib.md5(key.encode('utf-8')).hexdigest()
-            rc.set(rediskeytempotomorrow, result, 1800)
-            rc.expire(rediskeytempotomorrow ,1800)
-            syslog.syslog(syslog.LOG_DEBUG,"SET TEMPO TOMORROW IN REDIS: '%s'" % result)
-        else:
-          result = gettempotomorrow.decode("UTF-8")
-          syslog.syslog(syslog.LOG_DEBUG,"FOUND TEMPO TOMORROW IN REDIS: '%s'" % result)
-        #except:
-        #    result = temporequest.TempoTomorrow()
-
-        if format == "json":
-          web.header('Content-Type', 'application/json')
-          return json.dumps({"tempocolor": result})
-        else:
-          return result
+          if result[0] == "OK":
+            return result[1]
+          else:
+            return result[0]
+      # Other case
       web.badrequest()
       return "Incorrect request : /tempoedf/{now | tomorrow}\n"
 
@@ -1412,12 +1390,11 @@ class season:
 
 
 """
-@api {get} /ejpedf/:zone/:date/:responsetype EJP EDF Status Request
+@api {get} /ejpedf/:date/:responsetype EJP EDF Status Request
 @apiName GetEJP
 @apiGroup Domogeek
 @apiDescription Ask for EJP EDF Status
-@apiParam {String} zone  Specify Zone Request  {nord|sud|ouest|paca}
-@apiParam {String} date  Ask for today or tomorrow {today|tomorrow}
+@apiParam {String} date  Ask for today or tomorrow {now|tomorrow}
 @apiParam {String} [responsetype]  Specify Response Type (raw by default or specify json, only for single element).
 @apiSuccessExample Success-Response:
 HTTP/1.1 200 OK
@@ -1432,87 +1409,57 @@ HTTP/1.1 400 Bad Request
 400 Bad Request
 
 @apiExample Example usage:
-     curl http://api.domogeek.fr/ejpedf/nord/today
-     curl http://api.domogeek.fr/ejpedf/sud/tomorrow
-     curl http://api.domogeek.fr/ejpedf/paca/today/json
+     curl http://api.domogeek.fr/ejpedf/now
+     curl http://api.domogeek.fr/ejpedf/tomorrow
+     curl http://api.domogeek.fr/ejpedf/now/json
 """
 class ejpedf:
     def GET(self,uri):
       request = uri.split('/')
       if request == ['']:
         web.badrequest()
-        return "Incorrect request : /edfejp/{nord|sud|ouest|paca}/{today|tomorrow}\n"
+        return "Incorrect request : /ejpedf/{now | tomorrow}\n"
       try:
-        zone = request[0]
-      except:
-        web.badrequest()
-        return "Incorrect request : /edfejp/{nord|sud|ouest|paca}/{today|tomorrow}\n"
-      try:
-        daterequest = request[1]
-      except:
-        web.badrequest()
-        return "Incorrect request : /edfejp/{nord|sud|ouest|paca}/{today|tomorrow}\n"
-      try:
-        format = request[2]
+        format = request[1]
       except:
         format = None
-      try:
-        zoneok = str(zone.lower())
-      except:
-        web.badrequest()
-        return "Incorrect request : /edfejp/{nord|sud|ouest|paca}/{today|tomorrow}\n"
-      if zoneok not in ["nord", "sud", "paca", "ouest"]:
-        web.badrequest()
-        return "Incorrect request : /edfejp/{nord|sud|ouest|paca}/{today|tomorrow}\n"
-      if request[1] == "today":
-        syslog.syslog(syslog.LOG_DEBUG,"request edfejp %s " % request[1])  
-        getejptoday=None
+      if request[0] == "now" or request[0] == "tomorrow":
+        syslog.syslog(syslog.LOG_DEBUG,f"request ejpedf {request[0]}")
+        EJPRedis = None
+        key=f"ejp{request[0]}"
+        redisKey =  hashlib.md5(key.encode('utf-8')).hexdigest()
         if not rc is None:
-          key="ejptoday"+zoneok
-          rediskeyejptoday =  hashlib.md5(key.encode('utf-8')).hexdigest()
-          getejptoday = rc.get(rediskeyejptoday)
-        if getejptoday is None:
-          result = ejprequest.EJPToday()
-          if not rc is None:
-            key="ejptoday"+zoneok
-            rediskeyejptoday =  hashlib.md5(key.encode('utf-8')).hexdigest()
-            rc.set(rediskeyejptoday, result)
-            rc.expire(rediskeyejptoday, 1800)
-            syslog.syslog(syslog.LOG_DEBUG, "SET EJP "+zoneok+" TODAY IN REDIS: %s" % result)
+          EJPRedis = rc.get(redisKey)
+        if EJPRedis is None:
+          if request[0] == "now":
+            result = ejprequest.getToday()
+          elif request[0] == "tomorrow":
+            result = ejprequest.getTomorrow()
+          else:
+            result = ["ERROR",""]
+          if not rc is None and result[0] == "OK":
+            rc.set(redisKey, result[1], 1800)
+            rc.expire(redisKey,1800)
+            syslog.syslog(syslog.LOG_DEBUG,f"Set '{key}' in REDIS: '{result[1]}'")
         else:
-          result = getejptoday.decode("UTF-8")
-          syslog.syslog(syslog.LOG_DEBUG, "FOUND EJP "+zoneok+" TODAY IN REDIS: %s" % result)
-
+          result = ["OK",""]
+          result [1] = EJPRedis.decode("UTF-8")
+          syslog.syslog(syslog.LOG_DEBUG,f"Found '{key}' in REDIS: 'result[1]'")
         if format == "json":
           web.header('Content-Type', 'application/json')
-          return json.dumps({"ejp": result})
+          if result[0] == "OK":
+            return json.dumps({"ejp": result[1]})
+          else:
+            return json.dumps({"ejp": result[0]})
         else:
-          return result
+          if result[0] == "OK":
+            return result[1]
+          else:
+            return result[0]
+      # Other case
+      web.badrequest()
+      return "Incorrect request : /ejpedf/{now | tomorrow}\n"
 
-      if request[1] == "tomorrow":
-        syslog.syslog(syslog.LOG_DEBUG,"request edfejp %s " % request[1])  
-        getejptomorrow=None
-        if not rc is None:
-          key="ejptomorrow"+zoneok
-          rediskeyejptomorrow =  hashlib.md5(key.encode('utf-8')).hexdigest()
-          getejptomorrow = rc.get(rediskeyejptomorrow)
-        if getejptomorrow is None:
-          result = ejprequest.EJPTomorrow()
-          if not rc is None:
-            key="ejptomorrow"+zoneok
-            rediskeyejptomorrow =  hashlib.md5(key.encode('utf-8')).hexdigest()
-            rc.set(rediskeyejptomorrow, result)
-            rc.expire(rediskeyejptomorrow, 1800)
-            syslog.syslog(syslog.LOG_DEBUG, "SET EJP "+zoneok+" TOMOROW IN REDIS: %s" % result)
-        else:
-          result = getejptomorrow.decode("UTF-8")
-          syslog.syslog(syslog.LOG_DEBUG, "FOUND EJP "+zoneok+" TOMOROW IN REDIS: %s" % result)
-
-        if format == "json":
-          web.header('Content-Type', 'application/json')
-          return json.dumps({"ejp": result})
-        else:
-          return result
 
 """
 @api {get} /feastedsaint/:date/:responsetype Feasted Day of Saint Request

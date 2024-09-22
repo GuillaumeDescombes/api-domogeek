@@ -48,7 +48,8 @@ class vigilance:
   def getvigilance(self, deprequest):
     if len(deprequest) != 2:
       syslog.syslog(syslog.LOG_ERR, "Vigilance: Error in department number")
-      return "non defini", "non defini", "non defini"
+    #does not work anymore
+    return "non defini", "non defini", "non defini"
     url = 'http://vigilance2019.meteofrance.com/data/NXFR34_LFPW_.xml'
     try:
       data = urllib.request.urlopen(url)
