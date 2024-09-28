@@ -17,7 +17,7 @@ import syslog
 class EDFTempo:
 
   def __init__(self):
-    self.EDFoptions = {
+    self.EDFOptions = {
             'verify': False,
             'timeout': 5,
             'headers': {
@@ -45,13 +45,13 @@ class EDFTempo:
   def __getTempoDate(self, dateTempo):
     try:
       # Current time
-      self.EDFoptions['headers']['X-Request-Id'] = str(int(time.time())) + '460'
+      self.EDFOptions['headers']['X-Request-Id'] = str(int(time.time())) + '460'
       sDate2 = (dateTempo + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
       sDate1 = (dateTempo).strftime("%Y-%m-%d")
       #Create URL
       url = f"https://api-commerce.edf.fr/commerce/activet/v1/calendrier-jours-effacement?option=TEMPO&dateApplicationBorneInf={sDate1}"
       url = url + f"&dateApplicationBorneSup={sDate2}&identifiantConsommateur=src"
-      response = requests.get(url, **self.EDFoptions)
+      response = requests.get(url, **self.EDFOptions)
     except:
       syslog.syslog(syslog.LOG_ERR, "Tempo: cannot get Tempo data")
       return ["ERROR", ""]

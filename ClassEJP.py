@@ -17,7 +17,7 @@ import syslog
 class EDFEJP:
 
   def __init__(self):
-    self.EDFoptions = {
+    self.EDFOptions = {
             'verify': False,
             'timeout': 5,
             'headers': {
@@ -45,13 +45,13 @@ class EDFEJP:
   def __getEJPDate(self, dateEJP):
     try:
       # Current time
-      self.EDFoptions['headers']['X-Request-Id'] = str(int(time.time())) + '460'
+      self.EDFOptions['headers']['X-Request-Id'] = str(int(time.time())) + '460'
       sDate2 = (dateEJP + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
       sDate1 = (dateEJP).strftime("%Y-%m-%d")
       #Create URL
       url = f"https://api-commerce.edf.fr/commerce/activet/v1/calendrier-jours-effacement?option=EJP&dateApplicationBorneInf={sDate1}"
       url = url + f"&dateApplicationBorneSup={sDate2}&identifiantConsommateur=src"
-      response = requests.get(url, **self.EDFoptions)
+      response = requests.get(url, **self.EDFOptions)
     except:
       syslog.syslog(syslog.LOG_ERR, "EJP: cannot get EJP data")
       return ["ERROR", ""]

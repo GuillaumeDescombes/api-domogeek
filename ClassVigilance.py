@@ -7,20 +7,27 @@
 # V1 2022.12.04
 # V2 2024.09.22
 
-import urllib.request, urllib.error
 import syslog
 import json
 import traceback
+import time
+import requests
 
 #https://donneespubliques.meteofrance.fr/?fond=produit&id_produit=305&id_rubrique=50
 
 class MeteoFranceVigilance:
 
   def __init__ (self, apiKey):
-    self.headers =  {
-      "accept": "*/*",
-      "apikey": apiKey
+    self.MeteoFranceOptions = {
+            'verify': False,
+            'timeout': 5,
+            'headers': {
+              "User-Agent": "curl/7.88.1",
+              "accept": "*/*",
+              "apikey": apiKey
+            }
     }
+    requests.packages.urllib3.disable_warnings()
 
   def __getColor(self, number):
     if type(number) == int:
@@ -71,23 +78,26 @@ class MeteoFranceVigilance:
       traceback.print_exc()
       return "ERROR", "", "", "", ""
 
-    url = "https://public-api.meteofrance.fr/public/DPVigilance/v1/cartevigilance/encours"
     try:
-      req = urllib.request.Request(url, headers=self.headers)
-      #proxies= urllib.request.getproxies()
-      #print(f"proxies: {proxies}")
-      response = urllib.request.urlopen(req)
-    except:
-      syslog.syslog(syslog.LOG_ERR, "Vigilance: cannot get data")
+      url = "https://public-api.meteofrance.fr/public/DPVigilance/v1/cartevigilance/encours"
+      #disable proxy and meteofrance does not like it ....
+      proxies = {
+        "http": "",
+        "https": "",
+      }
+      response = requests.get(url, **self.MeteoFranceOptions, proxies=proxies)
+    except Exception as err:
+      syslog.syslog(syslog.LOG_ERR, "Vigilance: cannot get data ({err})")
       traceback.print_exc()
       return "ERROR", "", "", "", ""
+
     try:
-      data = json.load(response)
-      response.close()
+      data = response.json()
     except:
       syslog.syslog(syslog.LOG_ERR, "Vigilance: JSON format is incorrect")
       traceback.print_exc()
       return "ERROR","", "", "", ""
+
     try:
       periods = data['product']['periods']
       for period in periods:
@@ -121,7 +131,7 @@ class MeteoFranceVigilance:
     return "UNDEFINED", "", "", "", ""
 
 if __name__ == "__main__":
-  #Test for 92
+  #Test for 92 & 34
   VigilanceRequest = MeteoFranceVigilance("")
   VigilanceResponse=VigilanceRequest.getVigilance(92)
   print(f"response (92): {VigilanceResponse}")

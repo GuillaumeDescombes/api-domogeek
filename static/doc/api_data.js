@@ -1,7 +1,7 @@
 define({ api: [
   {
     "type": "get",
-    "url": "/ejpedf/:zone/:date/:responsetype",
+    "url": "/ejpedf/:date/:responsetype",
     "title": "EJP EDF Status Request",
     "name": "GetEJP",
     "group": "Domogeek",
@@ -12,16 +12,9 @@ define({ api: [
           {
             "group": "Parameter",
             "type": "String",
-            "field": "zone",
-            "optional": false,
-            "description": "Specify Zone Request  {nord|sud|ouest|paca}"
-          },
-          {
-            "group": "Parameter",
-            "type": "String",
             "field": "date",
             "optional": false,
-            "description": "Ask for today or tomorrow {today|tomorrow}"
+            "description": "Ask for today or tomorrow {now|tomorrow}"
           },
           {
             "group": "Parameter",
@@ -52,7 +45,7 @@ define({ api: [
     "examples": [
       {
         "title": "Example usage:",
-        "content": "   curl http://api.domogeek.fr/ejpedf/nord/today\n   curl http://api.domogeek.fr/ejpedf/sud/tomorrow\n   curl http://api.domogeek.fr/ejpedf/paca/today/json\n"
+        "content": "   curl http://api.domogeek.fr/ejpedf/now\n   curl http://api.domogeek.fr/ejpedf/tomorrow\n   curl http://api.domogeek.fr/ejpedf/now/json\n"
       }
     ],
     "version": "0.0.0",
@@ -517,7 +510,7 @@ define({ api: [
             "type": "String",
             "field": "vigilancerequest",
             "optional": false,
-            "description": "Vigilance request {color|risk|flood|all}."
+            "description": "Vigilance request {color|risk|flood|storm|all}."
           },
           {
             "group": "Parameter",

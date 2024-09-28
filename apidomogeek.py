@@ -199,7 +199,7 @@ class index:
     def GET(self, uri):
       # redirect to the static file ...
       request = uri.split('/')
-      if request == ['']:      
+      if request == ['']:
         raise web.seeother('/static/index.html')
       else:
         raise web.seeother("/static/" + request[0])
