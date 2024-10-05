@@ -25,6 +25,10 @@ class MeteoFranceVigilance:
               "User-Agent": "curl/7.88.1",
               "accept": "*/*",
               "apikey": apiKey
+            },
+            'proxies': {
+              "http": "",
+              "https": ""
             }
     }
     requests.packages.urllib3.disable_warnings()
@@ -78,19 +82,21 @@ class MeteoFranceVigilance:
       traceback.print_exc()
       return "ERROR", "", "", "", ""
 
-    try:
-      url = "https://public-api.meteofrance.fr/public/DPVigilance/v1/cartevigilance/encours"
-      #disable proxy and meteofrance does not like it ....
-      proxies = {
+    url = "https://public-api.meteofrance.fr/public/DPVigilance/v1/cartevigilance/encours"
+    #disable proxy and meteofrance does not like it ....
+    proxies = {
         "http": "",
         "https": "",
-      }
-      response = requests.get(url, **self.MeteoFranceOptions, proxies=proxies)
+    }
+    s = requests.Session()
+    a = requests.adapters.HTTPAdapter(max_retries=5, pool_connections=1)
+    s.mount('http://', a)
+    s.mount('https://', a)
+    try:
+      response = s.get(url, **self.MeteoFranceOptions)
     except Exception as err:
-      syslog.syslog(syslog.LOG_ERR, "Vigilance: cannot get data ({err})")
-      traceback.print_exc()
+      syslog.syslog(syslog.LOG_ERR, f"Vigilance: cannot get data - {err}")
       return "ERROR", "", "", "", ""
-
     try:
       data = response.json()
     except:

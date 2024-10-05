@@ -21,11 +21,9 @@ import ClassTempo
 import ClassSchoolCalendar
 import ClassVigilance
 import ClassGeoLocation
-import ClassDawnDusk
 import ClassWeather
 import ClassEJP
 import ClassEcoW
-
 
 #***************#
 # log           #
@@ -98,7 +96,6 @@ school = ClassSchoolCalendar.schoolcalendar()
 dayrequest = Holiday.jourferie()
 temporequest = ClassTempo.EDFTempo()
 geolocationrequest = ClassGeoLocation.geolocation()
-dawnduskrequest = ClassDawnDusk.sunriseClass()
 weatherrequest = ClassWeather.weather()
 ejprequest = ClassEJP.EDFEJP()
 ecowattrequest = ClassEcoW.EDFEcoWatt()
@@ -159,14 +156,10 @@ urls = (
   '/tempoedf/(.*)', 'tempoedf',
   '/ejpedf/(.*)', 'ejpedf',
   '/schoolholiday/(.*)', 'schoolholiday',
-  '/weekend/(.*)', 'weekend',
   '/holidayall/(.*)', 'holidayall',
   '/vigilance/(.*)', 'vigilance',
   '/geolocation/(.*)', 'geolocation',
-  '/sun/(.*)', 'dawndusk',
   '/weather/(.*)', 'weather',
-  '/season(.*)', 'season',
-  '/myip(.*)', 'myip',
   '/feastedsaint/(.*)', 'feastedsaint',
   '/ecowattedf/(.*)', 'ecowattedf',
   '/(.*)', 'index'
@@ -307,104 +300,15 @@ class holiday:
 
 
 """
-@api {get} /weekend/:daterequest/:responsetype Week-end Status Request
-@apiName GetWeekend
-@apiGroup Domogeek
-@apiDescription Ask to know if :daterequest is a week-end day
-@apiParam {String} daterequest Ask for specific date {now | tomorrow | D-M-YYYY}.
-@apiParam {String} [responsetype]  Specify Response Type (raw by default or specify json, only for single element).
-@apiSuccessExample Success-Response:
-     HTTP/1.1 200 OK
-     True
-
-     HTTP/1.1 200 OK
-     False
-
-@apiErrorExample Error-Response:
-     HTTP/1.1 400 Bad Request
-     400 Bad Request
-
-@apiExample Example usage:
-     curl http://api.domogeek.fr/weekend/now
-     curl http://api.domogeek.fr/weekend/tomorrow
-     curl http://api.domogeek.fr/weekend/now/json
-     curl http://api.domogeek.fr/weekend/16-07-2014/json
-
-"""
-class weekend:
-    def GET(self,uri):
-      request = uri.split('/')
-      if request == ['']:
-        web.badrequest()
-        return "Incorrect request : /weekend/{now|tomorrow|date(D-M-YYYY)}\n"
-      try:
-        format = request[1]
-      except:
-        format = None
-      if request[0] == "now":
-        syslog.syslog(syslog.LOG_DEBUG,"request weekend %s" % request[0])        
-        datenow = datetime.now()
-        daynow = datetime.now().weekday()
-        day = datenow.day
-        if daynow == 5 or daynow == 6:
-          result = "True"
-        else:
-          result = "False"
-        if format == "json":
-          web.header('Content-Type', 'application/json')
-          return json.dumps({"weekend": result})
-        else:
-          return result
-      if request[0] == "tomorrow":
-        syslog.syslog(syslog.LOG_DEBUG,"request weekend %s" % request[0])        
-        today = date.today()
-        datetomorrow = today + timedelta(days=1)
-        day = datetomorrow.weekday()
-        if day == 5 or day == 6:
-          result = "True"
-        else:
-          result = "False"
-        if format == "json":
-          web.header('Content-Type', 'application/json')
-          return json.dumps({"weekend": result})
-        else:
-          return result
-      if request[0] != "now" and request[0] != "tomorrow":
-        try:
-          daterequest = request[0]
-          day,month,year = daterequest.split('-')
-        except:
-          web.badrequest()
-          return "Incorrect date format : D-M-YYYY\n"
-        try:
-          int(day)
-          int(month)
-          int(year)
-        except:
-          web.badrequest()
-          return "Incorrect date format : D-M-YYYY\n"
-        syslog.syslog(syslog.LOG_DEBUG,"request weekend %s" % request[0])        
-        requestday = date(int(year),int(month),int(day)).weekday()
-        if requestday == 5 or requestday == 6:
-          result = "True"
-        else:
-          result = "False"
-        if format == "json":
-          web.header('Content-Type', 'application/json')
-          return json.dumps({"weekend": result})
-        else:
-          return result
-
-"""
 @api {get} /holidayall/:zone/:daterequest All Holidays Status Request
 @apiName GetHolidayall
 @apiGroup Domogeek
-@apiDescription Ask to know if :daterequest is a holiday, school holiday and week-end day
+@apiDescription Ask to know if :daterequest is a holiday or school holiday
 @apiParam {String} zone  School Zone (A, B or C).
 @apiParam {String} daterequest Ask for specific date {now | tomorrow | D-M-YYYY}.
 @apiSuccessExample Success-Response:
      HTTP/1.1 200 OK
-     {"holiday": "False", "weekend": "False", "schoolholiday": "Vacances de printemps - Zone A"}
+     {"holiday": "False", "schoolholiday": "Vacances de printemps - Zone A"}
 
 
 @apiErrorExample Error-Response:
@@ -443,27 +347,23 @@ class holidayall:
         try:
           responseholiday = urllib.request.urlopen(localapiurl+'/holiday/now')
           responseschoolholiday = urllib.request.urlopen(localapiurl+'/schoolholiday/'+zoneok+'/now')
-          responseweekend = urllib.request.urlopen(localapiurl+'/weekend/now')
           resultholiday = responseholiday.read().decode('UTF-8')
           resultschoolholiday = responseschoolholiday.read().decode('UTF-8')
-          resultweekend = responseweekend.read().decode('UTF-8')
         except:
           return "no data available"
         web.header('Content-Type', 'application/json')
-        return json.dumps({"holiday": resultholiday, "schoolholiday": resultschoolholiday, "weekend": resultweekend}, ensure_ascii=False).encode('utf8')
+        return json.dumps({"holiday": resultholiday, "schoolholiday": resultschoolholiday}, ensure_ascii=False).encode('utf8')
       if request[1] == "tomorrow":
         syslog.syslog(syslog.LOG_DEBUG,"request holidayall %s" % request[1])        
         try:
           responseholiday = urllib.request.urlopen(localapiurl+'/holiday/tomorrow')
           responseschoolholiday = urllib.request.urlopen(localapiurl+'/schoolholiday/'+zoneok+'/tomorrow')
-          responseweekend = urllib.request.urlopen(localapiurl+'/weekend/tomorrow')
           resultholiday = responseholiday.read().decode('utf-8')
           resultschoolholiday = responseschoolholiday.read().decode('utf-8')
-          resultweekend = responseweekend.read().decode('utf-8')
         except:
           return "no data available"
         web.header('Content-Type', 'application/json')
-        return json.dumps({"holiday": resultholiday, "schoolholiday": resultschoolholiday, "weekend": resultweekend}, ensure_ascii=False).encode('utf8')
+        return json.dumps({"holiday": resultholiday, "schoolholiday": resultschoolholiday}, ensure_ascii=False).encode('utf8')
       
       if request[1] != "now" and request[1] != "tomorrow":
         try:
@@ -483,14 +383,12 @@ class holidayall:
         try:
           responseholiday = urllib.request.urlopen(localapiurl+'/holiday/'+daterequest)
           responseschoolholiday = urllib.request.urlopen(localapiurl+'/schoolholiday/'+zoneok+'/'+daterequest)
-          responseweekend = urllib.request.urlopen(localapiurl+'/weekend/'+daterequest)
           resultholiday = responseholiday.read().decode('utf-8')
           resultschoolholiday = responseschoolholiday.read().decode('utf-8')
-          resultweekend = responseweekend.read().decode('utf-8')
         except:
           return "no data available"
         web.header('Content-Type', 'application/json')
-        return json.dumps({"holiday": resultholiday, "schoolholiday": resultschoolholiday, "weekend": resultweekend}, ensure_ascii=False).encode('utf8')
+        return json.dumps({"holiday": resultholiday, "schoolholiday": resultschoolholiday}, ensure_ascii=False).encode('utf8')
 
 
 """
@@ -991,158 +889,6 @@ class geolocation:
          
 
 """
-@api {get} /sun/:city/:sunrequest/:date/:responsetype Sun Status Request 
-@apiName GetSun
-@apiGroup Domogeek
-@apiDescription Ask to know sunrise, sunset, zenith, day duration for :date in :city (France)
-@apiParam {String} city City name (avoid accents, no space, France Metropolitan).
-@apiParam {String} sunrequest  Ask for {sunrise | sunset | zenith | dayduration | all}.
-@apiParam {String} date  Date request {now | tomorrow}.
-@apiParam {String} [responsetype]  Specify Response Type (raw by default or specify json, only for single element).
-@apiSuccessExample Success-Response:
-     HTTP/1.1 200 OK
-     {"sunset": "20:59"}
-
-     HTTP/1.1 200 OK
-     {"dayduration": "15:06", "sunset": "21:18", "zenith": "13:44", "sunrise": "6:11"}
-
-@apiErrorExample Error-Response:
-     HTTP/1.1 400 Bad Request
-     400 Bad Request
-
-@apiExample Example usage:
-     curl http://api.domogeek.fr/sun/brest/all/now
-     curl http://api.domogeek.fr/sun/bastia/sunset/now/json
-     curl http://api.domogeek.fr/sun/strasbourg/sunrise/tomorrow
-
-"""
-class dawndusk:
-    def GET(self,uri):
-      getutc = float(time.strftime("%z")[:3])
-      request = uri.split('/')
-      if request == ['']:
-        web.badrequest()
-        return "Incorrect request : /sun/city/{sunrise|sunset|zenith|dayduration|all}/{now|tomorrow}\n"
-      try:
-        city = request[0]
-      except:
-        web.badrequest()
-        return "Incorrect request : /sun/city/{sunrise|sunset|zenith|dayduration|all}/{now|tomorrow}\n"
-      if len(city) < 1:
-          web.badrequest()
-          return "Incorrect request : /sun/city/{sunrise|sunset|zenith|dayduration|all}/{now|tomorrow}\n"
-      try:
-        testUnicode=str(city)
-      except UnicodeEncodeError:
-        web.badrequest()
-        return "Incorrect city format : /sun/city/{sunrise|sunset|zenith|dayduration|all}/{now|tomorrow}\n"
-      try:
-        dawnduskrequestelement = request[1]
-      except:
-        web.badrequest()
-        return "Incorrect request : /sun/city/{sunrise|sunset|zenith|dayduration|all}/{now|tomorrow}\n"
-      try:
-        daterequest = request[2]
-      except:
-       web.badrequest()
-       return "Incorrect request : /sun/city/{sunrise|sunset|zenith|dayduration|all}/{now|tomorrow}\n"
-      try:
-        format = request[3]
-      except:
-        format = None
-      if dawnduskrequestelement not in ["sunrise", "sunset", "zenith", "dayduration", "all"]:
-        return "Incorrect request : /sun/city/{sunrise|sunset|zenith|dayduration|all}/{now|tomorrow}\n"
-      syslog.syslog(syslog.LOG_DEBUG,"request dawndusk (sun) %s" % request[2])  
-      try:
-        getlocation = None
-        if not rc is None:
-          key=city
-          rediskey =  hashlib.md5(key.encode('utf-8')).hexdigest()
-          getlocation = rc.get(rediskey)
-        if getlocation is None:
-          syslog.syslog(syslog.LOG_DEBUG,"GET GEODATA for '%s'" % city)
-          responsegeolocation = urllib.request.urlopen(localapiurl+'/geolocation/'+city)
-          resultgeolocation = json.load(responsegeolocation)
-          latitude =  resultgeolocation["latitude"]
-          longitude =  resultgeolocation["longitude"]
-        else:
-          syslog.syslog(syslog.LOG_DEBUG,"FOUND GEODATA IN REDIS for '%s'" % city)
-          tr1 =  getlocation.decode("UTF-8").replace("(","")
-          tr2 = tr1.replace(")","")
-          data = tr2.split(',')
-          latitude = float(data[0])
-          longitude = float(data[1])
-      except:
-        return "no GEO data available"
-      if request[2] == "now":
-        today=date.today()
-      elif request[2] == "tomorrow":
-        today = date.today() + timedelta(days=1)
-      else:
-        return "Incorrect request : /sun/city/{sunrise|sunset|zenith|dayduration|all}/{now|tomorrow}\n"
-      dawnduskrequest.setNumericalDate(today.day,today.month,today.year)
-      dawnduskrequest.setLocation(latitude, longitude)
-      dawnduskrequest.calculateWithUTC(getutc)
-      sunrise = dawnduskrequest.sunriseTime
-      zenith = dawnduskrequest.meridianTime
-      sunset = dawnduskrequest.sunsetTime
-      dayduration =dawnduskrequest.durationTime
-      if request[2] == "now" and dawnduskrequestelement == "all" :
-          web.header('Content-Type', 'application/json')
-          return json.dumps({"sunrise": sunrise, "zenith": zenith, "sunset": sunset, "dayduration": dayduration})
-      if request[2] == "now" and dawnduskrequestelement == "sunrise" :
-          if format == "json":
-            web.header('Content-Type', 'application/json')
-            return json.dumps({"sunrise": sunrise})
-          else:
-            return sunrise
-      if request[2] == "now" and dawnduskrequestelement == "sunset" :
-          if format == "json":
-            web.header('Content-Type', 'application/json')
-            return json.dumps({"sunset": sunset})
-          else:
-            return sunset
-      if request[2] == "now" and dawnduskrequestelement == "zenith" :
-          if format == "json":
-            web.header('Content-Type', 'application/json')
-            return json.dumps({"zenith": zenith})
-          else:
-            return zenith
-      if request[2] == "now" and dawnduskrequestelement == "dayduration" :
-          if format == "json":
-            web.header('Content-Type', 'application/json')
-            return json.dumps({"dayduration": dayduration})
-          else:
-            return dayduration
-      if request[2] == "tomorrow" and dawnduskrequestelement == "all" :
-          web.header('Content-Type', 'application/json')
-          return json.dumps({"sunrise": sunrise, "zenith": zenith, "sunset": sunset, "dayduration": dayduration})
-      if request[2] == "tomorrow" and dawnduskrequestelement == "sunrise" :
-          if format == "json":
-            web.header('Content-Type', 'application/json')
-            return json.dumps({"sunrise": sunrise})
-          else:
-            return sunrise
-      if request[2] == "tomorrow" and dawnduskrequestelement == "sunset" :
-          if format == "json":
-            web.header('Content-Type', 'application/json')
-            return json.dumps({"sunset": sunset})
-          else:
-            return sunset
-      if request[2] == "tomorrow" and dawnduskrequestelement == "zenith" :
-          if format == "json":
-            web.header('Content-Type', 'application/json')
-            return json.dumps({"zenith": zenith})
-          else:
-            return zenith
-      if request[2] == "tomorrow" and dawnduskrequestelement == "dayduration" :
-          if format == "json":
-            web.header('Content-Type', 'application/json')
-            return json.dumps({"dayduration": dayduration})
-          else:
-            return dayduration
-
-"""
 @api {get} /weather/:city/:weatherrequest/:date/:responsetype Weather Status Request
 @apiName GetWeather
 @apiGroup Domogeek
@@ -1300,99 +1046,6 @@ class weather:
               return tomorrowweather
         else:
            return tomorrowweather
-
-"""
-@api {get} /myip/:responsetype Display Public IP
-@apiName GetMyPublicIP
-@apiGroup Domogeek
-@apiDescription Display your public IP
-@apiParam {String} [responsetype]  Specify Response Type (raw by default or specify json, only for single element).
-@apiSuccessExample Success-Response:
-     HTTP/1.1 200 OK
-     {"myip": "1.1.1.1"}
-
-@apiErrorExample Error-Response:
-     HTTP/1.1 400 Bad Request
-     400 Bad Request
-
-@apiExample Example usage:
-     curl http://api.domogeek.fr/myip
-     curl http://api.domogeek.fr/myip/json
-"""
-class myip:
-  def GET(self,uri,ip=None):
-    try:
-      request = uri.split('/')
-    except:
-      pass
-    try:
-      format = request[1]
-    except:
-      format = None
-    syslog.syslog(syslog.LOG_DEBUG,"request myip")  
-    ip = web.ctx.env.get('HTTP_X_FORWARDED_FOR', web.ctx.get('ip', ''))
-    for ip in ip.split(','):
-      ip = ip.strip()
-      try:
-        socket.inet_aton(ip)
-        if format == "json":
-          web.header('Cache-control', 'public,max-age=0')
-          web.header('Content-Type', 'application/json')
-          return json.dumps({"myip": ip})
-        else:
-          web.header('Cache-control', 'public,max-age=0')
-          return ip
-      except socket.error:
-        web.badrequest()
-        pass
-
-"""
-@api {get} /season/:responsetype Display Current Season
-@apiName GetSeason
-@apiGroup Domogeek
-@apiDescription Display current season 
-@apiParam {String} [responsetype]  Specify Response Type (raw by default or specify json, only for single element).
-@apiSuccessExample Success-Response:
-     HTTP/1.1 200 OK
-     {"season": "winter"}
-
-@apiErrorExample Error-Response:
-     HTTP/1.1 400 Bad Request
-     400 Bad Request
-
-@apiExample Example usage:
-     curl http://api.domogeek.fr/season
-     curl http://api.domogeek.fr/season/json
-"""
-class season:
-  def GET(self,uri):
-    try:
-      request = uri.split('/')
-    except:
-      pass
-    try:
-      format = request[1]
-    except:
-      format = None
-    syslog.syslog(syslog.LOG_DEBUG,"request season")        
-    today = datetime.today().timetuple().tm_yday
-    spring = range(80, 172)
-    summer = range(172, 264)
-    autumn = range(264, 355)
-    if today in spring:
-      season = 'spring'
-    elif today in summer:
-      season = 'summer'
-    elif today in autumn:
-      season = 'autumn'
-    else:
-      season = 'winter'
-    if format == "json":
-      web.header('Content-Type', 'application/json')
-      return json.dumps({"season": season})
-    else:
-      return season
-
 
 """
 @api {get} /ejpedf/:date/:responsetype EJP EDF Status Request
